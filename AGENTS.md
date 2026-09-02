@@ -26,7 +26,7 @@ node src/build-report.js           # rebuild HTML from out/khazix_games.json + c
 npx serve out -p 4173              # optional local static server
 ```
 
-`out/agurin-q-vs-r.html` is **standalone static HTML**. CSS, charts, cards, and filter JS are inlined. The `src/*.js` files are only needed to **generate** it. Champion portraits load from Data Dragon CDN (`https://ddragon.leagueoflegends.com/...`); the rest works offline.
+`out/index.html` is **standalone static HTML**. CSS, charts, cards, and filter JS are inlined. The `src/*.js` files are only needed to **generate** it. Champion portraits load from Data Dragon CDN (`https://ddragon.leagueoflegends.com/...`); the rest works offline.
 
 ## Layout
 
@@ -46,7 +46,7 @@ cache/meraki-champions.json
 cache/champion-kits.json     schemaVersion 9
 cache/ddragon/champions.json
 out/khazix_games.json        source dataset for rebuilds
-out/agurin-q-vs-r.html       the report
+out/index.html               the report
 ```
 
 Rebuild without Riot: `node src/build-report.js`. After changing `report.js`, `lobby.js`, `reasoning.js`, or kits, rebuild and reload the HTML.

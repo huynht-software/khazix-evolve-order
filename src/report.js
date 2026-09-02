@@ -651,7 +651,7 @@ export async function writeHtmlReport(games, championIndex, outDir = "out", kits
 `;
 
   await fs.mkdir(outDir, { recursive: true });
-  const file = path.join(outDir, "agurin-q-vs-r.html");
+  const file = path.join(outDir, "index.html");
   await fs.writeFile(file, html, "utf8");
   return file;
 }

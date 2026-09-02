@@ -2,4 +2,4 @@
 cache/
 node_modules/
 out/*
-!out/agurin-q-vs-r.html
+!out/index.html
