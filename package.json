@@ -1,0 +1,14 @@
+{
+  "name": "khazix-evolve-order",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Analyse a player's Kha'Zix evolution order by enemy matchup, from Riot match timelines.",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "report": "node src/cli.js --games 50 --scan 800"
+  }
+}
