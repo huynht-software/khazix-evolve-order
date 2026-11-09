@@ -4,7 +4,7 @@ Cursor also loads [AGENTS.md](./AGENTS.md) (same content).
 
 Node 20 ESM CLI (`"type": "module"`, no npm dependencies) that pulls ranked solo Kha'Zix games from the Riot API and builds a standalone HTML report of **Q vs R first evolve** vs enemy lobby and jungle matchup.
 
-Default subject: **EMPEROR AGURIN#ROYAL** on EUW. Current dataset: **50** ranked solo games (scan up to 800 match IDs).
+Default CLI subject: **EMPEROR AGURIN#ROYAL** on EUW. Current dataset: **91** games: the original **50 EUW** games plus **41 NA** games from **NAgurin#EU1**, found in his last 300 ranked solo games. The report has separate Original / New tabs; each tab has its own charts and filters. NA records have `platform: "na1"` and `riotId`; match-ID prefixes distinguish the samples without changing old records.
 
 This file is the working memory from the report-building conversation. Prefer it over the older README when they disagree.
 
@@ -13,6 +13,7 @@ This file is the working memory from the report-building conversation. Prefer it
 - Riot key lives in `.env` as `RIOT_API_KEY=...`. **Never print it, commit it, or put it in the HTML.**
 - `.gitignore` already excludes `.env`, `cache/`, `node_modules/`, and generated JSON/CSV under `out/`.
 - Development keys expire every **24 hours**. `401`/`403` means regenerate at https://developer.riotgames.com — do not treat it as a code bug.
+- Riot API development-key rate limits: **20 requests per 1 second** and **100 requests per 2 minutes**. Both limits apply simultaneously; `src/riotApi.js` enforces them.
 - Python is not installed and is not part of this project.
 
 ## What this project is for
@@ -76,6 +77,8 @@ Derived in `kits.js` from Meraki roles + ability text:
 Shown on champion chips, kit-table columns (Body / Move / Fight / Targeted / Skillshot / Hard CC / Soft CC / Reveal), and expandable notes.
 
 ## Lobby types (`LOBBY_TRAITS` in `src/lobby.js`)
+
+Range categories come from `ChampionIndex.rangeClass` in `src/ddragon.js`: base attack range ≤350 is melee, 351–549 short range, ≥550 long range. Explicit long-range artillery exceptions: Xerath, Ziggs, Velkoz, Lux, Hwei, Jayce. Missing metadata stays unknown. Malzahar is short range; Tristana/Caitlyn are long range. Range appears on chips, in the kit table and notes, and in clickable 3+ lobby / single-jungler range tags. These are report heuristics, not every spell's reach.
 
 Same ids/labels/tones/tests for match-card bubbles and the lobby chart. A game can have many tags.
 

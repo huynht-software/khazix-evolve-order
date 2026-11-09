@@ -3,7 +3,7 @@
 import { parseArgs } from "node:util";
 
 import { annotateTeamShape, exportGames, render } from "./analyze.js";
-import { ChampionIndex } from "./ddragon.js";
+import { ChampionIndex, ItemCatalog } from "./ddragon.js";
 import { KHAZIX, parseKhazixGame } from "./extract.js";
 import { writeHtmlReport } from "./report.js";
 import { KitCatalog } from "./kits.js";
@@ -55,7 +55,7 @@ Options:
   };
 }
 
-async function collectGames(client, puuid, scan, target) {
+async function collectGames(client, puuid, scan, target, items) {
   const matchIds = await client.matchIds(puuid, { count: scan, queue: RANKED_SOLO_QUEUE });
   console.log(`Scanning ${matchIds.length} ranked solo matches for ${KHAZIX} games...`);
 
@@ -73,7 +73,7 @@ async function collectGames(client, puuid, scan, target) {
     );
     if (!playedKhazix) continue;
 
-    const game = parseKhazixGame(match, await client.timeline(matchIds[index]), puuid);
+    const game = parseKhazixGame(match, await client.timeline(matchIds[index]), puuid, items);
     if (game) found.push(game);
   }
   progressDone();
@@ -118,7 +118,8 @@ async function main() {
       `(routing: ${client.region})`,
   );
 
-  const games = await collectGames(client, account.puuid, args.scan, args.games);
+  const items = await ItemCatalog.load(args.cacheDir);
+  const games = await collectGames(client, account.puuid, args.scan, args.games, items);
   const champions = games.length ? await ChampionIndex.load(args.cacheDir) : null;
   const kits = games.length ? await KitCatalog.load(args.cacheDir) : null;
   if (games.length) annotateTeamShape(games, champions);

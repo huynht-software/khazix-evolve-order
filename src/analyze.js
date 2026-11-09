@@ -59,6 +59,7 @@ function gamesTable(games) {
       { header: "At levels" },
       { header: "Enemy JG" },
       { header: "Enemy melee" },
+      { header: "Items" },
     ],
     rows: games.map((game) => [
       game.playedAt,
@@ -69,6 +70,7 @@ function gamesTable(games) {
       game.evolutions.map((e) => `${e.slot}@${e.championLevel}`).join(" / ") || "-",
       game.enemyJungler || "?",
       `${game.enemyMeleeCount}/5`,
+      [game.legendaryOrderLabel || game.itemOrderLabel || "none", game.bootsLabel].filter(Boolean).join(" · "),
     ]),
   });
 }
@@ -101,6 +103,71 @@ function mean(values) {
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
+}
+
+function itemOrderTable(games) {
+  const grouped = [...groupBy(games, (game) => game.itemOrderLabel || "neither").entries()].sort(
+    (a, b) => b[1].length - a[1].length,
+  );
+  return renderTable({
+    title: "Umbral Glaive vs Voltaic Cyclosword (first completion)",
+    columns: [
+      { header: "Order" },
+      { header: "Games", align: "right" },
+      { header: "Share", align: "right" },
+      { header: "Win rate" },
+    ],
+    rows: grouped.map(([label, bucket]) => [
+      label,
+      String(bucket.length),
+      `${Math.round((bucket.length / games.length) * 100)}%`,
+      winrate(bucket),
+    ]),
+  });
+}
+
+function thirdItemTable(games) {
+  const reached = games.filter((game) => game.thirdItem);
+  const grouped = [...groupBy(reached, (game) => game.thirdItem).entries()].sort(
+    (a, b) => b[1].length - a[1].length,
+  );
+  return renderTable({
+    title: `Third legendary (${reached.length}/${games.length} games finished one)`,
+    columns: [
+      { header: "Item" },
+      { header: "Games", align: "right" },
+      { header: "Share", align: "right" },
+      { header: "Win rate" },
+    ],
+    rows: grouped.map(([label, bucket]) => [
+      label,
+      String(bucket.length),
+      `${Math.round((bucket.length / reached.length) * 100)}%`,
+      winrate(bucket),
+    ]),
+  });
+}
+
+function bootsTable(games) {
+  const reached = games.filter((game) => game.boots);
+  const grouped = [...groupBy(reached, (game) => game.boots).entries()].sort(
+    (a, b) => b[1].length - a[1].length,
+  );
+  return renderTable({
+    title: `Completed boots (${reached.length}/${games.length} games finished a pair)`,
+    columns: [
+      { header: "Boots" },
+      { header: "Games", align: "right" },
+      { header: "Share", align: "right" },
+      { header: "Win rate" },
+    ],
+    rows: grouped.map(([label, bucket]) => [
+      label,
+      String(bucket.length),
+      `${Math.round((bucket.length / reached.length) * 100)}%`,
+      winrate(bucket),
+    ]),
+  });
 }
 
 function timingTable(games) {
@@ -210,6 +277,9 @@ export function render(games) {
 
   for (const table of [
     orderSummaryTable(withEvolves),
+    itemOrderTable(games),
+    thirdItemTable(games),
+    bootsTable(games),
     timingTable(withEvolves),
     byEnemyJunglerTable(withEvolves),
     byEnemyMeleeTable(withEvolves),
@@ -240,6 +310,14 @@ export async function exportGames(games, outDir) {
     "enemy_jungler",
     "enemy_melee_count",
     "enemy_champions",
+    "item_order",
+    "umbral_minute",
+    "voltaic_minute",
+    "legendary_order",
+    "third_item",
+    "third_item_minute",
+    "boots",
+    "boots_minute",
   ];
   const lines = [header.join(",")];
   for (const game of games) {
@@ -256,6 +334,14 @@ export async function exportGames(games, outDir) {
       game.enemyJungler || "",
       game.enemyMeleeCount,
       game.enemyChampions.join("|"),
+      game.itemOrderLabel || "",
+      game.umbralMinute ?? "",
+      game.voltaicMinute ?? "",
+      game.legendaryOrderLabel || "",
+      game.thirdItem || "",
+      game.thirdItemMinute ?? "",
+      game.boots || "",
+      game.bootsMinute ?? "",
     ].map((value) => {
       const text = String(value);
       return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;

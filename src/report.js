@@ -118,7 +118,7 @@ function evolvePills(game) {
 }
 
 function champChip(member, version) {
-  const flags = [];
+  const flags = [`<span class="flag flag-range">${escapeHtml(member.range)}</span>`];
   const durability = member.kit?.durability;
   if (durability) {
     flags.push(`<span class="flag flag-${durability}">${durability}</span>`);
@@ -162,6 +162,7 @@ function kitTable(team, version) {
       const kit = member.kit;
       return `<tr>
       <td class="kit-champ"><img src="${iconUrl(version, member.iconId)}" alt="" width="22" height="22"> ${escapeHtml(member.name)}<small>${escapeHtml(member.positionLabel)}</small></td>
+      <td>${escapeHtml(member.range)}</td>
       <td class="body-${kit?.durability ?? "unknown"}">${escapeHtml(kit?.durability ?? "—")}</td>
       <td class="move-${kit?.mobility ?? "unknown"}">${escapeHtml(kit?.mobility ?? "—")}</td>
       <td>${kitLine(kit?.fightRoles ?? [])}</td>
@@ -175,7 +176,7 @@ function kitTable(team, version) {
     .join("");
 
   return `<table class="kit-table">
-    <thead><tr><th>Champion</th><th>Body</th><th>Move</th><th>Fight</th><th>Targeted</th><th>Skillshot</th><th>Hard CC</th><th>Soft CC</th><th>Reveal</th></tr></thead>
+    <thead><tr><th>Champion</th><th>Range</th><th>Body</th><th>Move</th><th>Fight</th><th>Targeted</th><th>Skillshot</th><th>Hard CC</th><th>Soft CC</th><th>Reveal</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
@@ -206,14 +207,16 @@ function gameCard(entry, index, version) {
     <header class="card-head">
       <div class="idx">#${String(index + 1).padStart(2, "0")}</div>
       <div class="pills">${evolvePills(game)}</div>
-      <div class="order">${escapeHtml(game.evolveOrderLabel)}</div>
+      <div class="head-meta">
+        <div class="order">${escapeHtml(game.evolveOrderLabel)}</div>
+      </div>
     </header>
     <div class="team-type">${chips || `<span class="team-type-empty">no lobby tags</span>`}</div>
     <div class="team">${analysis.team.map((member) => champChip(member, version)).join("")}</div>
     <details class="more">
       <summary>Kit &amp; notes</summary>
       <div class="when-row">${escapeHtml(game.playedAt)} · patch ${escapeHtml(game.patch)} · ${game.durationMinutes} min · <span class="${game.win ? "win" : "loss"}">${game.win ? "Win" : "Loss"}</span> ${game.kills}/${game.deaths}/${game.assists} · vs ${escapeHtml(jungleName)} jungle</div>
-      ${kitTable(analysis.team, version)}
+      <div class="kit-scroll">${kitTable(analysis.team, version)}</div>
       <div class="why">${why}</div>
     </details>
   </article>`;
@@ -395,6 +398,15 @@ function stylesheet() {
   --win: #9be37a;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.dataset-tabs { display: flex; gap: 8px; margin: 24px 0 12px; }
+.dataset-tabs button { flex: 1; font: inherit; font-weight: 700; color: var(--muted); background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; text-align: left; }
+.dataset-tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--q); background: #24301b; }
+.dataset-tabs span { display: block; font-size: 12px; font-weight: 400; }
+.dataset-info, .filter-status { color: var(--muted); font-size: 13px; }
+.flag-range, .lobby-chip.flag-range { background: #23303b; color: #add8f3; }
+.kit-scroll { overflow-x: auto; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--w); outline-offset: 3px; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
 body {
   font: 15px/1.5 "Segoe UI", "Trebuchet MS", sans-serif;
@@ -491,6 +503,7 @@ button.stack-row:hover { background: #121812; }
 .win { color: var(--win); }
 .loss { color: var(--loss); }
 .order { font-size: 18px; font-weight: 750; letter-spacing: 0.02em; }
+.head-meta { text-align: right; }
 .pills { display: flex; gap: 8px; margin: 0; }
 .pill { min-width: 58px; text-align: center; border-radius: 10px; padding: 6px 8px 4px; font-weight: 800; border: 1px dashed var(--line); color: var(--muted); display: inline-flex; flex-direction: column; line-height: 1.1; }
 .pill small { font-size: 10px; font-weight: 600; opacity: 0.85; }
@@ -552,6 +565,7 @@ button.stack-row:hover { background: #121812; }
   .rules, .team, .card-head, .charts { grid-template-columns: 1fr; }
   .rule.wide, .chart-card.wide { grid-column: auto; }
   .order { justify-self: start; }
+  .head-meta { text-align: left; }
   .hbar, .stack-row { grid-template-columns: 1fr; }
 }
 `;
@@ -559,8 +573,32 @@ button.stack-row:hover { background: #121812; }
 
 export async function writeHtmlReport(games, championIndex, outDir = "out", kits = null) {
   const rows = explainAll(games, championIndex, kits);
-  const stats = summarize(rows);
   const version = championIndex.version;
+  const datasets = [
+    { id: 'original', label: 'Original · EUW', account: 'EMPEROR AGURIN#ROYAL', rows: rows.filter(row => !row.game.matchId.startsWith('NA1_')) },
+    { id: 'na', label: 'New · NA', account: 'NAgurin#EU1', rows: rows.filter(row => row.game.matchId.startsWith('NA1_')) },
+  ];
+  const datasetPanels = datasets.map((dataset, index) => {
+    const stats = summarize(dataset.rows);
+    const dates = dataset.rows.map(row => row.game.playedAt.slice(0,10)).sort();
+    return `<section class="dataset-panel" id="panel-${dataset.id}" role="tabpanel" aria-labelledby="tab-${dataset.id}" ${index ? 'hidden' : ''}>
+      <p class="dataset-info">${escapeHtml(dataset.account)} · ${dataset.rows.length} ranked solo Kha'Zix games · ${dates[0] ?? '—'} – ${dates.at(-1) ?? '—'}. ${dataset.id === 'na' ? 'Found in the last 300 ranked solo games scanned.' : 'Original 50-game sample.'} Charts exclude games with no evolve.</p>
+      ${summarySection(stats)}
+      <div class="stats">
+        <div class="stat">First-evolve model agreed <strong>${stats.fits}/${stats.withFirst.length}</strong></div>
+        <div class="stat">W at 11 <strong>${stats.secondW}/${stats.reached11}</strong></div>
+        <div class="stat">E at 16 <strong>${stats.thirdE}/${stats.reached16}</strong></div>
+      </div>
+      <div class="filters" aria-label="First evolve filters">
+        <button class="on" data-filter="all" aria-pressed="true">All games</button>
+        <button data-filter="Q" aria-pressed="false">Q first</button>
+        <button data-filter="R" aria-pressed="false">R first</button>
+        <button data-filter="twist" aria-pressed="false">Twists</button>
+      </div>
+      <p class="filter-status" aria-live="polite">Showing ${dataset.rows.length} of ${dataset.rows.length} games</p>
+      <div class="games">${dataset.rows.map((row, i) => gameCard(row, i, version)).join('\n')}</div>
+    </section>`;
+  }).join('');
 
   const html = `<!doctype html>
 <html lang="en">
@@ -573,12 +611,13 @@ export async function writeHtmlReport(games, championIndex, outDir = "out", kits
 <body>
   <div class="wrap">
     <h1>When Agurin evolves Q vs R</h1>
-    <p class="lede">Last ${games.length} ranked solo Kha'Zix games on EMPEROR AGURIN#ROYAL (EUW). At 6 the choice is isolation Q or a third, longer R invis. This page is what he actually took, tagged by the enemy lobby and jungle matchup — same bubbles on every match, same rows in the lobby chart. Green is Q-first, magenta is R-first.</p>
+    <p class="lede">Two separate samples: 50 original EUW games and 41 NA games from NAgurin#EU1’s last 300 ranked solo games. At 6 the choice is isolation Q or a third, longer R invis. This page is what he actually took, tagged by the enemy lobby and jungle matchup — same bubbles on every match, same rows in the lobby chart. Green is Q-first, magenta is R-first.</p>
     <div class="rules">
       <div class="rule wide">
         <h2>How to read this</h2>
         <p>Lobby-type, jungle, and champion bars show the majority first evolve from the left; gray is the rest. They are sorted by how far from 50/50 the split is, either way. Click a lobby or jungle type on a chart or match card to filter games. Champion rows need at least three games.</p>
         <p>Each card is evolve order, lobby tags, then the enemy team (jungle outlined). Open Kit &amp; notes for body / move / fight roles, CC, reveals, and a short composition writeup. Body is tank, bruiser, or squishy. Move is mobile or immobile. Fight is peel, engage, and/or self-peel. Hard CC locks you; soft CC is slow, blind, silence, and the like.</p>
+        <p>Range buckets use base attack range: melee ≤350, short range 351–549, long range ≥550. Artillery exceptions: Xerath, Ziggs, Vel’Koz, Lux, Hwei, Jayce. Malzahar is short range; Tristana and Caitlyn are long range. These are broad tags, not every spell’s reach.</p>
         <p>Above the cards: Q first, R first, or Twists. Twists are games where a simple model (R only vs early targeted threats, and only if the jungler cannot just reveal him) disagrees with what he evolved.</p>
       </div>
       <div class="rule q">
@@ -590,36 +629,45 @@ export async function writeHtmlReport(games, championIndex, outDir = "out", kits
         <p>A third invis cast. Worth more when the threat is targeted spells or autos and nobody reveals him. Cassio, Nautilus, and some ADCs often still get R later rather than first.</p>
       </div>
     </div>
-    ${summarySection(stats)}
-    <div class="stats">
-      <div class="stat">First-evolve model agreed <strong>${stats.fits}/${stats.withFirst.length}</strong></div>
-      <div class="stat">W at 11 <strong>${stats.secondW}/${stats.reached11}</strong></div>
-      <div class="stat">E at 16 <strong>${stats.thirdE}/${stats.reached16}</strong></div>
+    <div class="dataset-tabs" role="tablist" aria-label="Dataset">
+      ${datasets.map((dataset, index) => `<button type="button" role="tab" id="tab-${dataset.id}" aria-controls="panel-${dataset.id}" aria-selected="${index === 0}" tabindex="${index ? -1 : 0}">${dataset.label} <span>${dataset.rows.length} games</span></button>`).join('')}
     </div>
-    <div class="filters" role="tablist">
-      <button class="on" data-filter="all">All games</button>
-      <button data-filter="Q">Q first</button>
-      <button data-filter="R">R first</button>
-      <button data-filter="twist">Twists</button>
-    </div>
-    <div id="games">
-      ${rows.map((row, i) => gameCard(row, i, version)).join("\n")}
-    </div>
+    ${datasetPanels}
     <p class="footnote">Per-game notes describe the enemy composition and jungle matchup from cached kit data (Meraki / League wiki in <code>cache/champion-kits.json</code>). Match timelines from Riot match-v5 (<code>levelUpType: EVOLVE</code>).</p>
   </div>
   <script>
-    const firstButtons = document.querySelectorAll(".filters button");
-    const cards = document.querySelectorAll(".card");
-    const tagControls = document.querySelectorAll("[data-tag]");
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    const panels = document.querySelectorAll('.dataset-panel');
+    function selectTab(tab) {
+      tabs.forEach(button => {
+        const selected = button === tab;
+        button.setAttribute('aria-selected', String(selected));
+        button.tabIndex = selected ? 0 : -1;
+      });
+      panels.forEach(panel => { panel.hidden = panel.id !== tab.getAttribute('aria-controls'); });
+    }
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('keydown', event => {
+        const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+        if (next !== null) { event.preventDefault(); selectTab(tabs[next]); tabs[next].focus(); }
+      });
+    });
+    panels.forEach(panel => {
+    const firstButtons = panel.querySelectorAll(".filters button");
+    const cards = panel.querySelectorAll(".card");
+    const tagControls = panel.querySelectorAll("[data-tag]");
     let firstFilter = "all";
     let tagFilter = "";
 
     function applyFilters() {
       firstButtons.forEach((button) => {
         button.classList.toggle("on", button.dataset.filter === firstFilter);
+        button.setAttribute("aria-pressed", String(button.dataset.filter === firstFilter));
       });
       tagControls.forEach((el) => {
         el.classList.toggle("on", Boolean(tagFilter) && el.dataset.tag === tagFilter);
+        el.setAttribute("aria-pressed", String(Boolean(tagFilter) && el.dataset.tag === tagFilter));
       });
       cards.forEach((card) => {
         const firstOk =
@@ -628,8 +676,10 @@ export async function writeHtmlReport(games, championIndex, outDir = "out", kits
           (firstFilter === "twist" && card.dataset.fit === "twist");
         const tags = (card.dataset.tags || "").split(" ").filter(Boolean);
         const tagOk = !tagFilter || tags.includes(tagFilter);
-        card.style.display = firstOk && tagOk ? "" : "none";
+        card.hidden = !(firstOk && tagOk);
       });
+      const visible = [...cards].filter(card => !card.hidden).length;
+      panel.querySelector(".filter-status").textContent = "Showing " + visible + " of " + cards.length + " games" + (visible ? "" : " — no matches; clear a filter to see games");
     }
 
     firstButtons.forEach((button) => {
@@ -644,6 +694,7 @@ export async function writeHtmlReport(games, championIndex, outDir = "out", kits
         tagFilter = tagFilter === id ? "" : id;
         applyFilters();
       });
+    });
     });
   </script>
 </body>

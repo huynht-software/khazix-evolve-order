@@ -10,6 +10,147 @@ export const KHAZIX = "Khazix";
 export const SKILL_SLOTS = { 1: "Q", 2: "W", 3: "E", 4: "R" };
 const SMITE_ID = 11;
 
+/** First legendary completions we care about for the lethality path. */
+export const TRACKED_ITEMS = {
+  3179: "Umbral Glaive",
+  6699: "Voltaic Cyclosword",
+  226699: "Voltaic Cyclosword",
+};
+
+const ITEM_SHORT_NAMES = {
+  "Umbral Glaive": "Umbral",
+  "Voltaic Cyclosword": "Voltaic",
+  "Serylda's Grudge": "Serylda's",
+  "Ionian Boots of Lucidity": "Ionian",
+  "Mercury's Treads": "Mercury's",
+  "Plated Steelcaps": "Steelcaps",
+  "Boots of Swiftness": "Swiftness",
+  "Berserker's Greaves": "Berserkers",
+  "Sorcerer's Shoes": "Sorcs",
+  "Mobility Boots": "Mobis",
+  "Symbiotic Soles": "Soles",
+};
+
+function shortItemName(name) {
+  return ITEM_SHORT_NAMES[name] ?? name;
+}
+
+function minuteAt(timestamp) {
+  return Math.round((timestamp / 60000) * 10) / 10;
+}
+
+/** First completed Umbral / Voltaic, undoing a buy if he refunds it. */
+function trackedItemPath(events, participantId) {
+  const held = new Map();
+  for (const event of events) {
+    if (event.participantId !== participantId) continue;
+    if (event.type === "ITEM_PURCHASED") {
+      const name = TRACKED_ITEMS[event.itemId];
+      if (name && !held.has(name)) {
+        held.set(name, { name, itemId: event.itemId, timestamp: event.timestamp });
+      }
+    } else if (event.type === "ITEM_UNDO") {
+      const name = TRACKED_ITEMS[event.beforeId];
+      if (name) held.delete(name);
+    }
+  }
+
+  const purchases = [...held.values()]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((item) => ({ name: item.name, minute: minuteAt(item.timestamp) }));
+
+  const umbral = purchases.find((item) => item.name === "Umbral Glaive") ?? null;
+  const voltaic = purchases.find((item) => item.name === "Voltaic Cyclosword") ?? null;
+  let itemOrderLabel = "neither";
+  if (umbral && voltaic) itemOrderLabel = `${purchases[0].name} > ${purchases[1].name}`;
+  else if (umbral) itemOrderLabel = "Umbral only";
+  else if (voltaic) itemOrderLabel = "Voltaic only";
+
+  return {
+    itemPurchases: purchases,
+    itemOrderLabel,
+    umbralMinute: umbral?.minute ?? null,
+    voltaicMinute: voltaic?.minute ?? null,
+  };
+}
+
+/** First completion of each legendary, undoing a buy if he refunds it. Boots excluded. */
+function legendaryItemPath(events, participantId, catalog) {
+  const held = new Map();
+  if (catalog) {
+    for (const event of events) {
+      if (event.participantId !== participantId) continue;
+      if (event.type === "ITEM_PURCHASED") {
+        const name = catalog.legendaryName(event.itemId);
+        if (name && !held.has(name)) {
+          held.set(name, { name, itemId: event.itemId, timestamp: event.timestamp });
+        }
+      } else if (event.type === "ITEM_UNDO") {
+        const name = catalog.legendaryName(event.beforeId);
+        if (name) held.delete(name);
+      }
+    }
+  }
+
+  const purchases = [...held.values()]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((item) => ({ name: item.name, minute: minuteAt(item.timestamp) }));
+  const third = purchases[2] ?? null;
+
+  return {
+    legendaryPurchases: purchases,
+    legendaryOrderLabel: purchases.slice(0, 3).map((item) => shortItemName(item.name)).join(" > "),
+    thirdItem: third?.name ?? null,
+    thirdItemMinute: third?.minute ?? null,
+  };
+}
+
+/** First completed boot pair (Ionian / Mercs / Steelcaps…), undoing a buy if he refunds it. */
+function bootPath(events, participantId, catalog) {
+  const held = new Map();
+  if (catalog) {
+    for (const event of events) {
+      if (event.participantId !== participantId) continue;
+      if (event.type === "ITEM_PURCHASED") {
+        const boot = catalog.completedBoot(event.itemId);
+        if (!boot) continue;
+        if (!held.has(boot.base)) {
+          held.set(boot.base, {
+            name: boot.base,
+            timestamp: event.timestamp,
+            upgrade: boot.depth >= 3 ? boot.name : null,
+          });
+        } else if (boot.depth >= 3) {
+          held.get(boot.base).upgrade = boot.name;
+        }
+      } else if (event.type === "ITEM_UNDO") {
+        const boot = catalog.completedBoot(event.beforeId);
+        if (!boot) continue;
+        const current = held.get(boot.base);
+        if (!current) continue;
+        if (boot.depth >= 3) current.upgrade = null;
+        else held.delete(boot.base);
+      }
+    }
+  }
+
+  const purchases = [...held.values()]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((item) => ({
+      name: item.name,
+      minute: minuteAt(item.timestamp),
+      upgrade: item.upgrade,
+    }));
+  const first = purchases[0] ?? null;
+
+  return {
+    boots: first?.name ?? null,
+    bootsLabel: first ? shortItemName(first.name) : "",
+    bootsMinute: first?.minute ?? null,
+    bootsUpgrade: first?.upgrade ?? null,
+  };
+}
+
 function* iterateEvents(timeline) {
   for (const frame of timeline.info.frames) {
     for (const event of frame.events ?? []) yield event;
@@ -48,7 +189,7 @@ function findEnemyJungler(participants, enemyTeamId) {
 }
 
 /** Returns a game record if `puuid` played Kha'Zix in this match, else null. */
-export function parseKhazixGame(match, timeline, puuid) {
+export function parseKhazixGame(match, timeline, puuid, itemCatalog = null) {
   const info = match.info;
   const participants = info.participants;
 
@@ -61,6 +202,7 @@ export function parseKhazixGame(match, timeline, puuid) {
   const levelUps = [];
   const evolveEvents = [];
   const skillLevelOrder = [];
+  const itemEvents = [];
 
   for (const event of iterateEvents(timeline)) {
     if (event.participantId !== participantId) continue;
@@ -73,8 +215,14 @@ export function parseKhazixGame(match, timeline, puuid) {
       } else {
         skillLevelOrder.push(SKILL_SLOTS[event.skillSlot] ?? "?");
       }
+    } else if (event.type === "ITEM_PURCHASED" || event.type === "ITEM_UNDO") {
+      itemEvents.push(event);
     }
   }
+
+  const items = trackedItemPath(itemEvents, participantId);
+  const legendaries = legendaryItemPath(itemEvents, participantId, itemCatalog);
+  const boots = bootPath(itemEvents, participantId, itemCatalog);
 
   levelUps.sort((a, b) => a.timestamp - b.timestamp);
   evolveEvents.sort((a, b) => a.timestamp - b.timestamp);
@@ -124,6 +272,18 @@ export function parseKhazixGame(match, timeline, puuid) {
     secondEvolve: evolveOrder[1] ?? null,
     evolutions,
     skillLevelOrder,
+    itemPurchases: items.itemPurchases,
+    itemOrderLabel: items.itemOrderLabel,
+    umbralMinute: items.umbralMinute,
+    voltaicMinute: items.voltaicMinute,
+    legendaryPurchases: legendaries.legendaryPurchases,
+    legendaryOrderLabel: legendaries.legendaryOrderLabel,
+    thirdItem: legendaries.thirdItem,
+    thirdItemMinute: legendaries.thirdItemMinute,
+    boots: boots.boots,
+    bootsLabel: boots.bootsLabel,
+    bootsMinute: boots.bootsMinute,
+    bootsUpgrade: boots.bootsUpgrade,
     enemyJungler: findEnemyJungler(participants, enemyTeamId),
     enemyTeam,
     enemyChampions,

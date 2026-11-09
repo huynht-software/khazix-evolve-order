@@ -176,6 +176,7 @@ function tagsFor(championKey, position, champions, kits) {
     iconId: info?.key ?? kit?.key ?? key,
     isMarksman,
     isMelee: Boolean(info && info.attackRange <= 350),
+    range: champions.rangeClass(key),
     antiR,
     rValue,
     skillshot: Boolean(manual.skillshot) || Boolean(kit?.hasSkillshotHardCc) || Boolean(kit?.hasSkillshot),
@@ -308,6 +309,10 @@ export function explainGame(game, champions, kits) {
 
   const paragraphs = [];
   paragraphs.push(jungleParagraph(jungle));
+  paragraphs.push(`Range: ${['melee', 'short range', 'long range'].map(range => {
+    const members = team.filter(champ => champ.range === range);
+    return `${members.length} ${range} (${named(members) || 'none'})`;
+  }).join('; ')}.${team.some(champ => champ.range === 'unknown') ? ' Some champions have no cached range data.' : ''}`);
 
   const bodyBits = [];
   if (tanks.length) bodyBits.push(`${tanks.length === 1 ? "tank" : "tanks"} ${named(tanks)}`);

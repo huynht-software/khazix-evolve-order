@@ -2,7 +2,7 @@
 
 Node 20 ESM CLI (`"type": "module"`, no npm dependencies) that pulls ranked solo Kha'Zix games from the Riot API and builds a standalone HTML report of **Q vs R first evolve** vs enemy lobby and jungle matchup.
 
-Default subject: **EMPEROR AGURIN#ROYAL** on EUW. Current dataset: **50** ranked solo games (scan up to 800 match IDs).
+Default CLI subject: **EMPEROR AGURIN#ROYAL** on EUW. Current dataset: **91** games: the original **50 EUW** games plus **41 NA** games from **NAgurin#EU1**, found in his last 300 ranked solo games. The report has separate Original / New tabs; each tab has its own charts and filters. NA records have `platform: "na1"` and `riotId`; match-ID prefixes distinguish the samples without changing old records.
 
 This file is the working memory from the report-building conversation. Prefer it over the older README when they disagree.
 
@@ -11,6 +11,7 @@ This file is the working memory from the report-building conversation. Prefer it
 - Riot key lives in `.env` as `RIOT_API_KEY=...`. **Never print it, commit it, or put it in the HTML.**
 - `.gitignore` already excludes `.env`, `cache/`, `node_modules/`, and generated JSON/CSV under `out/`.
 - Development keys expire every **24 hours**. `401`/`403` means regenerate at https://developer.riotgames.com — do not treat it as a code bug.
+- Riot API development-key rate limits: **20 requests per 1 second** and **100 requests per 2 minutes**. Both limits apply simultaneously; `src/riotApi.js` enforces them.
 - Python is not installed and is not part of this project.
 
 ## What this project is for
@@ -34,7 +35,7 @@ npx serve out -p 4173              # optional local static server
 src/cli.js          entry: Riot fetch, export JSON/CSV, write HTML
 src/riotApi.js      rate-limited, disk-cached Riot client
 src/extract.js      match + timeline → KhazixGame (EVOLVE events)
-src/ddragon.js      ChampionIndex
+src/ddragon.js      ChampionIndex, ItemCatalog
 src/kits.js         Meraki wiki kits (KIT_SCHEMA currently 9)
 src/lobby.js        shared lobby + jungle tags for cards and charts
 src/reasoning.js    per-game tags, tweet-based first-evolve model, composition notes
@@ -45,11 +46,16 @@ src/util.js         .env loader, tables
 cache/meraki-champions.json
 cache/champion-kits.json     schemaVersion 9
 cache/ddragon/champions.json
+cache/ddragon/items.json
 out/khazix_games.json        source dataset for rebuilds
 out/index.html               the report
 ```
 
-Rebuild without Riot: `node src/build-report.js`. After changing `report.js`, `lobby.js`, `reasoning.js`, or kits, rebuild and reload the HTML.
+- Rebuild without Riot: `node src/build-report.js`. After changing `report.js`, `lobby.js`, `reasoning.js`, or kits, rebuild and reload the HTML.
+
+## Items
+
+Checked in this sample, then left off the report: the build does not vary with matchup. Typical path is **Umbral > Voltaic > Endless Hunger** and **Ionian**. Extract still records legendaries and boots into `out/khazix_games.json`; do not add item charts, card lines, or stats to the HTML.
 
 ## Data
 
@@ -74,6 +80,8 @@ Derived in `kits.js` from Meraki roles + ability text:
 Shown on champion chips, kit-table columns (Body / Move / Fight / Targeted / Skillshot / Hard CC / Soft CC / Reveal), and expandable notes.
 
 ## Lobby types (`LOBBY_TRAITS` in `src/lobby.js`)
+
+Range categories come from `ChampionIndex.rangeClass` in `src/ddragon.js`: base attack range ≤350 is melee, 351–549 short range, ≥550 long range. Explicit long-range artillery exceptions: Xerath, Ziggs, Velkoz, Lux, Hwei, Jayce. Missing metadata stays unknown. Malzahar is short range; Tristana/Caitlyn are long range. Range appears on chips, in the kit table and notes, and in clickable 3+ lobby / single-jungler range tags. These are report heuristics, not every spell's reach.
 
 Same ids/labels/tones/tests for match-card bubbles and the lobby chart. A game can have many tags.
 
@@ -126,6 +134,7 @@ Single-jungler version of the same ideas (no 2+ / ADC-support counts): reveal; t
 - Notes and intro are composition-first. Tweet boxes at the top were removed; tweet logic remains only as the Twists model.
 - Champion matchup chart lists **all** champs with ≥ 3 games (not a top-12 sample-size cut), so Q-first extremes stay visible.
 - Jungle chart sits beside lobby type, same visual language.
+- Item path is near-constant (Umbral > Voltaic > Endless Hunger, Ionian). Do not put item charts or item lines on the report.
 - HTML is the shareable artifact; do not require `src/` at serve time.
 
 ## Style

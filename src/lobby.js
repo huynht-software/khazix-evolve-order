@@ -1,6 +1,12 @@
 /** Shared enemy-lobby and jungle-matchup tags for match cards and summary charts. */
 
 export const LOBBY_TRAITS = [
+  ...['melee', 'short range', 'long range'].map(range => ({
+    id: `range-${range.replace(' ', '-')}`,
+    label: `3+ ${range}`,
+    tone: 'range',
+    test: team => team.filter(champ => champ.range === range).length >= 3,
+  })),
   {
     id: "reveal",
     label: "Enemy has a reveal",
@@ -98,6 +104,12 @@ export function lobbyTagsFor(team) {
 
 /** Single-jungler version of the lobby tags (counts of 2+ / role-specific ADC-support tags drop out). */
 export const JUNGLE_TRAITS = [
+  ...['melee', 'short range', 'long range'].map(range => ({
+    id: `jg-range-${range.replace(' ', '-')}`,
+    label: `${range[0].toUpperCase() + range.slice(1)} jungler`,
+    tone: 'range',
+    test: jg => jg?.range === range,
+  })),
   {
     id: "jg-reveal",
     label: "Reveal jungler",
